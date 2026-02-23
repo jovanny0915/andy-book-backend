@@ -78,6 +78,8 @@ stripeWebhookRouter.post('/', async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  console.log('Stripe webhook received:', event.type, event.id);
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
@@ -86,24 +88,24 @@ stripeWebhookRouter.post('/', async (req, res) => {
       const amountCents = session.amount_total ?? 0;
       const currency = (session.currency ?? 'usd').toLowerCase();
 
-      if (supabase) {
-        const { error } = await supabase.from('payments').insert({
-          stripe_session_id: session.id,
-          customer_name: customerName,
-          email: email || null,
-          amount_cents: amountCents,
-          currency,
-        });
-        if (error) {
-          console.error('Stripe webhook: failed to store payment in Supabase:', error);
-          // Still return 200 so Stripe does not retry; log for manual fix
-        }
+      if (!supabase) {
+        console.warn('Stripe webhook: Supabase not configured (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY). Payment not stored:', session.id);
+        break;
+      }
+
+      const { data, error } = await supabase.from('payments').insert({
+        stripe_session_id: session.id,
+        customer_name: customerName,
+        email: email || null,
+        amount_cents: amountCents,
+        currency,
+      }).select('id').single();
+
+      if (error) {
+        console.error('Stripe webhook: failed to store payment in Supabase:', error.code, error.message, error.details);
+        // Still return 200 so Stripe does not retry
       } else {
-        console.log('Payment succeeded (Supabase not configured):', {
-          sessionId: session.id,
-          amountTotal: amountCents,
-          customerEmail: email,
-        });
+        console.log('Stripe webhook: payment stored in Supabase:', data?.id, 'session:', session.id);
       }
       break;
     }
