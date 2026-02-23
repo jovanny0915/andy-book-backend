@@ -12,8 +12,20 @@ import { stripeRouter, stripeWebhookRouter } from './routes/stripe.js';
 
 const app = express();
 
+// Allow multiple origins: set FRONTEND_ORIGIN to one URL, or ALLOWED_ORIGINS to comma-separated list
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : [process.env.FRONTEND_ORIGIN || 'http://localhost:3000', 'https://andy-book-frontend.vercel.app', 'https://victoriacross.ca'].filter(Boolean);
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' || 'https://victoriacross.ca' || 'https://andy-book-backend.vercel.app' }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true); // same-origin or server-to-server
+    if (uniqueOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+}));
 app.use(morgan('dev'));
 
 // Stripe webhook needs raw body for signature verification (must be before express.json)
