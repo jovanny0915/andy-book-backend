@@ -13,7 +13,7 @@ import { stripeRouter, stripeWebhookRouter } from './routes/stripe.js';
 const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' || 'https://victoriacross.ca' || 'https://andy-book-backend.vercel.app' }));
 app.use(morgan('dev'));
 
 // Stripe webhook needs raw body for signature verification (must be before express.json)
