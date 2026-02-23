@@ -71,3 +71,16 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_email_lower ON admin_users (LOWER(email));
+
+-- Payments: one-time donations from Stripe Checkout (filled by webhook on checkout.session.completed)
+CREATE TABLE IF NOT EXISTS payments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  stripe_session_id TEXT NOT NULL UNIQUE,
+  email TEXT,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'usd',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payments_stripe_session ON payments (stripe_session_id);

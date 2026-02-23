@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import Stripe from 'stripe';
+import { supabase } from '../lib/supabase.js';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
@@ -80,12 +81,28 @@ stripeWebhookRouter.post('/', async (req, res) => {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
-      // session.payment_status === 'paid', session.amount_total, session.customer_email, etc.
-      console.log('Payment succeeded:', {
-        sessionId: session.id,
-        amountTotal: session.amount_total,
-        customerEmail: session.customer_email ?? session.customer_details?.email,
-      });
+      const email = session.customer_email ?? session.customer_details?.email ?? null;
+      const amountCents = session.amount_total ?? 0;
+      const currency = (session.currency ?? 'usd').toLowerCase();
+
+      if (supabase) {
+        const { error } = await supabase.from('payments').insert({
+          stripe_session_id: session.id,
+          email: email || null,
+          amount_cents: amountCents,
+          currency,
+        });
+        if (error) {
+          console.error('Stripe webhook: failed to store payment in Supabase:', error);
+          // Still return 200 so Stripe does not retry; log for manual fix
+        }
+      } else {
+        console.log('Payment succeeded (Supabase not configured):', {
+          sessionId: session.id,
+          amountTotal: amountCents,
+          customerEmail: email,
+        });
+      }
       break;
     }
     case 'checkout.session.expired':
