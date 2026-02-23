@@ -81,6 +81,7 @@ stripeWebhookRouter.post('/', async (req, res) => {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
+      const customerName = session.customer_details?.name ?? null;
       const email = session.customer_email ?? session.customer_details?.email ?? null;
       const amountCents = session.amount_total ?? 0;
       const currency = (session.currency ?? 'usd').toLowerCase();
@@ -88,6 +89,7 @@ stripeWebhookRouter.post('/', async (req, res) => {
       if (supabase) {
         const { error } = await supabase.from('payments').insert({
           stripe_session_id: session.id,
+          customer_name: customerName,
           email: email || null,
           amount_cents: amountCents,
           currency,

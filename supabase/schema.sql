@@ -76,6 +76,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_users_email_lower ON admin_users (LO
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   stripe_session_id TEXT NOT NULL UNIQUE,
+  customer_name TEXT,
   email TEXT,
   amount_cents INTEGER NOT NULL,
   currency TEXT NOT NULL DEFAULT 'usd',
