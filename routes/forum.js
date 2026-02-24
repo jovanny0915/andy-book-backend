@@ -13,7 +13,7 @@ forumRouter.get('/threads', async (req, res) => {
   }
   const { data, error } = await supabase
     .from('forum_threads')
-    .select('id, title, author_email, created_at')
+    .select('id, title, author_email, created_at, category')
     .eq('status', 'approved')
     .order('created_at', { ascending: false });
   if (error) {
@@ -146,29 +146,46 @@ forumRouter.post('/verify-supabase', async (req, res) => {
   res.json({ verified: true, token: forumToken });
 });
 
+const ALLOWED_CATEGORIES = ['general', 'waterman', 'hickey', 'wilmot'];
+
+function normalizeCategory(category) {
+  if (category == null) return 'general';
+  const s = String(category).trim().toLowerCase();
+  return ALLOWED_CATEGORIES.includes(s) ? s : 'general';
+}
+
 // POST /api/forum/threads – create thread (requires verified user)
 forumRouter.post('/threads', forumAuthMiddleware, async (req, res) => {
-  const { title, body } = req.body || {};
+  const { title, body, category } = req.body || {};
   if (!title || !body) {
     return res.status(400).json({ message: 'Title and body required.' });
   }
   if (!supabase) {
     return res.status(503).json({ message: 'Service temporarily unavailable.' });
   }
+  const categoryVal = normalizeCategory(category);
+
+  const insertPayload = {
+    author_email: req.forumEmail,
+    title: String(title).trim(),
+    body: String(body).trim(),
+    category: categoryVal,
+    status: 'pending',
+  };
 
   const { data: thread, error } = await supabase
     .from('forum_threads')
-    .insert({
-      author_email: req.forumEmail,
-      title: String(title).trim(),
-      body: String(body).trim(),
-      status: 'pending',
-    })
-    .select('id, title, author_email, status, created_at')
+    .insert(insertPayload)
+    .select('id, title, author_email, category, status, created_at')
     .single();
 
   if (error) {
     console.error('Forum thread insert error:', error);
+    if (error.code === '42703' || (error.message && error.message.includes('category'))) {
+      return res.status(500).json({
+        message: 'Could not create thread. Database may be missing "category" column. Run supabase/add_forum_thread_category.sql in Supabase SQL Editor.',
+      });
+    }
     return res.status(500).json({ message: 'Could not create thread.' });
   }
   res.status(201).json(thread);
@@ -179,7 +196,7 @@ forumRouter.get('/threads/:id', async (req, res) => {
   if (!supabase) return res.status(404).json({ message: 'Not found.' });
   const { data: thread, error: threadError } = await supabase
     .from('forum_threads')
-    .select('id, title, body, author_email, status, created_at')
+    .select('id, title, body, author_email, category, status, created_at')
     .eq('id', req.params.id)
     .maybeSingle();
 
@@ -198,4 +215,42 @@ forumRouter.get('/threads/:id', async (req, res) => {
     .order('created_at', { ascending: true });
 
   res.json({ ...thread, replies: replies || [] });
+});
+
+// POST /api/forum/threads/:id/replies – create reply (requires verified user)
+forumRouter.post('/threads/:id/replies', forumAuthMiddleware, async (req, res) => {
+  const threadId = req.params.id;
+  const { body } = req.body || {};
+  if (!body || typeof body !== 'string' || !body.trim()) {
+    return res.status(400).json({ message: 'Reply body required.' });
+  }
+  if (!supabase) {
+    return res.status(503).json({ message: 'Service temporarily unavailable.' });
+  }
+
+  const { data: thread, error: threadErr } = await supabase
+    .from('forum_threads')
+    .select('id')
+    .eq('id', threadId)
+    .maybeSingle();
+  if (threadErr || !thread) {
+    return res.status(404).json({ message: 'Thread not found.' });
+  }
+
+  const { data: reply, error } = await supabase
+    .from('forum_replies')
+    .insert({
+      thread_id: threadId,
+      author_email: req.forumEmail,
+      body: String(body).trim(),
+      status: 'pending',
+    })
+    .select('id, thread_id, body, author_email, status, created_at')
+    .single();
+
+  if (error) {
+    console.error('Forum reply insert error:', error);
+    return res.status(500).json({ message: 'Could not create reply.' });
+  }
+  res.status(201).json(reply);
 });

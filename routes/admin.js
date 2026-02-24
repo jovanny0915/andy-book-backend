@@ -86,7 +86,7 @@ adminRouter.get('/posts/pending', async (req, res) => {
   const [threadsRes, repliesRes] = await Promise.all([
     supabase
       .from('forum_threads')
-      .select('id, title, body, author_email, created_at, status')
+      .select('id, title, body, author_email, category, created_at, status')
       .eq('status', 'pending')
       .order('created_at', { ascending: false }),
     supabase

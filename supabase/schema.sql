@@ -40,9 +40,13 @@ CREATE TABLE IF NOT EXISTS forum_threads (
   author_email TEXT NOT NULL REFERENCES forum_users(email),
   title TEXT NOT NULL,
   body TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general' CHECK (category IN ('general', 'waterman', 'hickey', 'wilmot')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Add category column if table already existed without it (run once if needed)
+-- ALTER TABLE forum_threads ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'general';
 
 CREATE INDEX IF NOT EXISTS idx_forum_threads_status ON forum_threads (status);
 
