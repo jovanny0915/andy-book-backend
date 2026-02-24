@@ -38,10 +38,24 @@ forumRouter.get('/threads', async (req, res) => {
     console.error('Forum threads list error:', error);
     return res.json({ threads: [] });
   }
-  // Normalize so every thread has a category (for display)
+  // Reply counts (approved only, for display consistency with thread page)
+  const threadIds = (data || []).map((t) => t.id);
+  const countByThread = {};
+  if (threadIds.length > 0) {
+    const { data: replies } = await supabase
+      .from('forum_replies')
+      .select('thread_id')
+      .eq('status', 'approved')
+      .in('thread_id', threadIds);
+    (replies || []).forEach((r) => {
+      countByThread[r.thread_id] = (countByThread[r.thread_id] || 0) + 1;
+    });
+  }
+  // Normalize so every thread has a category and reply_count
   const threads = (data || []).map((t) => ({
     ...t,
     category: t.category || 'general',
+    reply_count: countByThread[t.id] || 0,
   }));
   res.json({ threads });
 });
