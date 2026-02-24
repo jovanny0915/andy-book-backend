@@ -237,7 +237,7 @@ adminRouter.post('/users/reset-password', async (req, res) => {
     return res.status(503).json({ message: 'Service unavailable.' });
   }
 
-  const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+  const siteUrl = process.env.SITE_URL || 'https://victoriacross.ca';
 
   const { data, error } = await supabase.auth.admin.generateLink({
     type: 'recovery',

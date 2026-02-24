@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase.js';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
-const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+const siteUrl = process.env.SITE_URL || 'https://victoriacross.ca';
 
 export const stripeRouter = Router();
 export const stripeWebhookRouter = Router();
