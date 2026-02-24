@@ -6,21 +6,44 @@ import { signForumToken, forumAuthMiddleware } from '../lib/forumAuth.js';
 
 export const forumRouter = Router();
 
-// GET /api/forum/threads – list approved threads only
+const ALLOWED_CATEGORIES = ['general', 'waterman', 'hickey', 'wilmot'];
+
+// GET /api/forum/threads – list all threads, optional ?category= filter
 forumRouter.get('/threads', async (req, res) => {
   if (!supabase) {
     return res.json({ threads: [] });
   }
-  const { data, error } = await supabase
+  const rawCategory = req.query.category;
+  const category =
+    typeof rawCategory === 'string' && ALLOWED_CATEGORIES.includes(rawCategory.trim().toLowerCase())
+      ? rawCategory.trim().toLowerCase()
+      : null;
+
+  let query = supabase
     .from('forum_threads')
-    .select('id, title, author_email, created_at, category')
-    .eq('status', 'approved')
+    .select('id, title, author_email, created_at, category, status')
     .order('created_at', { ascending: false });
+
+  if (category) {
+    if (category === 'general') {
+      // Show threads with category 'general' or null/undefined (legacy rows)
+      query = query.or('category.eq.general,category.is.null');
+    } else {
+      query = query.eq('category', category);
+    }
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.error('Forum threads list error:', error);
     return res.json({ threads: [] });
   }
-  res.json({ threads: data || [] });
+  // Normalize so every thread has a category (for display)
+  const threads = (data || []).map((t) => ({
+    ...t,
+    category: t.category || 'general',
+  }));
+  res.json({ threads });
 });
 
 // POST /api/forum/register – register with email (send verification)
@@ -145,8 +168,6 @@ forumRouter.post('/verify-supabase', async (req, res) => {
   const forumToken = signForumToken(email);
   res.json({ verified: true, token: forumToken });
 });
-
-const ALLOWED_CATEGORIES = ['general', 'waterman', 'hickey', 'wilmot'];
 
 function normalizeCategory(category) {
   if (category == null) return 'general';
