@@ -57,8 +57,7 @@ petitionsRouter.post('/sign', async (req, res) => {
     return res.status(500).json({ message: 'Could not save signature.' });
   }
 
-  const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
-  const verifyUrl = `${siteUrl}/verify-petition?token=${encodeURIComponent(verificationToken)}`;
+  const verifyUrl = `/verify-petition?token=${encodeURIComponent(verificationToken)}`;
   const { ok } = await sendPetitionVerification(email, name, petitionId, verificationToken);
 
   res.status(201).json({
