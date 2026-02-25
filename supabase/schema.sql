@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS forum_replies (
 
 CREATE INDEX IF NOT EXISTS idx_forum_replies_thread ON forum_replies (thread_id);
 
+-- Book reviews: user-submitted ratings shown on /book after moderation approval.
+CREATE TABLE IF NOT EXISTS book_reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  quote TEXT NOT NULL,
+  reviewer_name TEXT NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  consent_given BOOLEAN NOT NULL DEFAULT true,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_book_reviews_status_created_at
+  ON book_reviews (status, created_at DESC);
+
 -- Optional: allow petition_signatures without requiring forum_users
 -- Forum users are separate (email verification for forum only).
 

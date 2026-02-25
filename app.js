@@ -6,6 +6,7 @@ import morgan from 'morgan';
 
 import { petitionsRouter } from './routes/petitions.js';
 import { forumRouter } from './routes/forum.js';
+import { reviewsRouter } from './routes/reviews.js';
 import { healthRouter } from './routes/health.js';
 import { adminRouter } from './routes/admin.js';
 import { stripeRouter, stripeWebhookRouter } from './routes/stripe.js';
@@ -60,6 +61,7 @@ app.use(express.json());
 app.use('/api/health', healthRouter);
 app.use('/api/petitions', petitionsRouter);
 app.use('/api/forum', forumRouter);
+app.use('/api/reviews', reviewsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/stripe', stripeRouter);
 
