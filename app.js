@@ -40,12 +40,17 @@ function isAllowedPreviewOrigin(origin) {
   return /^https:\/\/andy-book-frontend-[a-z0-9-]+\.vercel\.app$/i.test(origin);
 }
 
+function isAllowedLocalDevOrigin(origin) {
+  // Allow local frontend development hosts (any port).
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+}
+
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true); // same-origin or server-to-server
     const normalized = normalizeOrigin(origin);
-    if (uniqueOrigins.includes(normalized) || isAllowedPreviewOrigin(normalized)) {
+    if (uniqueOrigins.includes(normalized) || isAllowedPreviewOrigin(normalized) || isAllowedLocalDevOrigin(normalized)) {
       return callback(null, true);
     }
     return callback(null, false);
