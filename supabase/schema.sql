@@ -98,9 +98,23 @@ CREATE TABLE IF NOT EXISTS payments (
   customer_name TEXT,
   email TEXT,
   amount_cents INTEGER NOT NULL,
+  original_amount_cents INTEGER NOT NULL,
+  discount_amount_cents INTEGER NOT NULL DEFAULT 0,
+  discount_code TEXT,
+  used_discount_code BOOLEAN NOT NULL DEFAULT false,
   currency TEXT NOT NULL DEFAULT 'usd',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Backfill-safe updates for existing tables created before discount fields were added.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS original_amount_cents INTEGER;
+UPDATE payments SET original_amount_cents = amount_cents WHERE original_amount_cents IS NULL;
+ALTER TABLE payments ALTER COLUMN original_amount_cents SET NOT NULL;
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_amount_cents INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_code TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS used_discount_code BOOLEAN NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_stripe_session ON payments (stripe_session_id);
+CREATE INDEX IF NOT EXISTS idx_payments_used_discount_code ON payments (used_discount_code);

@@ -7,6 +7,77 @@ export const adminRouter = Router();
 // All admin routes require valid admin auth
 adminRouter.use(adminAuthMiddleware);
 
+// ---- Sales reporting (Stripe-backed payments) ----
+adminRouter.get('/sales/summary', async (req, res) => {
+  if (!supabase) {
+    return res.json({
+      currency: 'usd',
+      totals: {
+        overall_cents: 0,
+        with_code_cents: 0,
+        without_code_cents: 0,
+        discounts_given_cents: 0,
+      },
+      counts: {
+        overall: 0,
+        with_code: 0,
+        without_code: 0,
+      },
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select('amount_cents, original_amount_cents, discount_amount_cents, used_discount_code, currency');
+
+  if (error) {
+    console.error('Admin sales summary error:', error);
+    return res.status(500).json({ message: 'Failed to load sales summary.' });
+  }
+
+  const summary = (data || []).reduce((acc, payment) => {
+    const amount = Number(payment.amount_cents || 0);
+    const discountAmount = Number(payment.discount_amount_cents || 0);
+    const usedCode = Boolean(payment.used_discount_code);
+
+    acc.overall_cents += amount;
+    acc.discounts_given_cents += discountAmount;
+    acc.overall += 1;
+
+    if (usedCode) {
+      acc.with_code_cents += amount;
+      acc.with_code += 1;
+    } else {
+      acc.without_code_cents += amount;
+      acc.without_code += 1;
+    }
+    return acc;
+  }, {
+    overall_cents: 0,
+    with_code_cents: 0,
+    without_code_cents: 0,
+    discounts_given_cents: 0,
+    overall: 0,
+    with_code: 0,
+    without_code: 0,
+  });
+
+  return res.json({
+    currency: 'usd',
+    totals: {
+      overall_cents: summary.overall_cents,
+      with_code_cents: summary.with_code_cents,
+      without_code_cents: summary.without_code_cents,
+      discounts_given_cents: summary.discounts_given_cents,
+    },
+    counts: {
+      overall: summary.overall,
+      with_code: summary.with_code,
+      without_code: summary.without_code,
+    },
+  });
+});
+
 // GET /api/admin/me – return current admin user (for frontend auth check)
 adminRouter.get('/me', (req, res) => {
   res.json({ user: req.adminUser });

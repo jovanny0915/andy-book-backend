@@ -10,10 +10,22 @@ export const stripeRouter = Router();
 export const stripeWebhookRouter = Router();
 
 const ALLOWED_AMOUNTS = [5, 10, 15, 20];
+const DISCOUNT_PERCENT = 20;
+const HANDOUT_DISCOUNT_CODES = [
+  'VCROSS20A',
+  'VCROSS20B',
+  'VCROSS20C',
+  'VCROSS20D',
+  'VCROSS20E',
+];
+
+function normalizeCode(value) {
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
 
 /**
  * POST /api/stripe/create-checkout-session
- * Body: { amount: number } — one of 5, 10, 15, 20 (USD)
+ * Body: { amount: number, discountCode?: string } — one of 5, 10, 15, 20 (USD)
  * Returns: { url: string } — redirect to Stripe Checkout
  */
 stripeRouter.post('/create-checkout-session', async (req, res) => {
@@ -28,10 +40,30 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
     });
   }
 
+  const discountCode = normalizeCode(req.body?.discountCode);
+  const wantsDiscount = discountCode.length > 0;
+  const validDiscountCode = wantsDiscount && HANDOUT_DISCOUNT_CODES.includes(discountCode);
+
+  if (wantsDiscount && !validDiscountCode) {
+    return res.status(400).json({ message: 'Invalid discount code.' });
+  }
+
+  const originalAmountCents = amount * 100;
+  const finalAmountCents = validDiscountCode
+    ? Math.round(originalAmountCents * (100 - DISCOUNT_PERCENT) / 100)
+    : originalAmountCents;
+  const discountAmountCents = originalAmountCents - finalAmountCents;
+
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
+      metadata: {
+        discount_code: validDiscountCode ? discountCode : '',
+        used_discount_code: validDiscountCode ? 'true' : 'false',
+        original_amount_cents: String(originalAmountCents),
+        discount_amount_cents: String(discountAmountCents),
+      },
       line_items: [
         {
           price_data: {
@@ -41,7 +73,7 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
               description: 'Optional one-time support for Victoriacross.ca — research and site maintenance.',
               images: [],
             },
-            unit_amount: amount * 100, // cents
+            unit_amount: finalAmountCents, // cents
           },
           quantity: 1,
         },
@@ -87,6 +119,16 @@ stripeWebhookRouter.post('/', async (req, res) => {
       const email = session.customer_email ?? session.customer_details?.email ?? null;
       const amountCents = session.amount_total ?? 0;
       const currency = (session.currency ?? 'usd').toLowerCase();
+      const discountCode = normalizeCode(session.metadata?.discount_code);
+      const usedDiscountCode = session.metadata?.used_discount_code === 'true' || !!discountCode;
+      const parsedOriginalAmount = Number.parseInt(session.metadata?.original_amount_cents ?? '', 10);
+      const parsedDiscountAmount = Number.parseInt(session.metadata?.discount_amount_cents ?? '', 10);
+      const originalAmountCents = Number.isInteger(parsedOriginalAmount) && parsedOriginalAmount >= amountCents
+        ? parsedOriginalAmount
+        : amountCents;
+      const discountAmountCents = Number.isInteger(parsedDiscountAmount) && parsedDiscountAmount >= 0
+        ? parsedDiscountAmount
+        : Math.max(originalAmountCents - amountCents, 0);
 
       if (!supabase) {
         console.warn('Stripe webhook: Supabase not configured (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY). Payment not stored:', session.id);
@@ -98,6 +140,10 @@ stripeWebhookRouter.post('/', async (req, res) => {
         customer_name: customerName,
         email: email || null,
         amount_cents: amountCents,
+        original_amount_cents: originalAmountCents,
+        discount_amount_cents: discountAmountCents,
+        discount_code: usedDiscountCode ? discountCode : null,
+        used_discount_code: usedDiscountCode,
         currency,
       }).select('id').single();
 
