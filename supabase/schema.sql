@@ -77,6 +77,39 @@ CREATE TABLE IF NOT EXISTS book_reviews (
 CREATE INDEX IF NOT EXISTS idx_book_reviews_status_created_at
   ON book_reviews (status, created_at DESC);
 
+-- Seed initial public reviews used during mockup phase (idempotent).
+INSERT INTO book_reviews (title, quote, reviewer_name, rating, consent_given, status)
+SELECT
+  'Review of The Chaplain''s Diary',
+  'A moving and meticulously researched account. Essential reading for anyone interested in the Victoria Cross and the individuals behind the citations.',
+  'Verified Reader',
+  5,
+  true,
+  'approved'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM book_reviews
+  WHERE title = 'Review of The Chaplain''s Diary'
+    AND reviewer_name = 'Verified Reader'
+    AND quote = 'A moving and meticulously researched account. Essential reading for anyone interested in the Victoria Cross and the individuals behind the citations.'
+);
+
+INSERT INTO book_reviews (title, quote, reviewer_name, rating, consent_given, status)
+SELECT
+  'Powerful historical narrative',
+  'The chaplain''s perspective brings a unique depth to the story. Highly recommended for history enthusiasts and those who want to understand the human side of these events.',
+  'History Enthusiast',
+  5,
+  true,
+  'approved'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM book_reviews
+  WHERE title = 'Powerful historical narrative'
+    AND reviewer_name = 'History Enthusiast'
+    AND quote = 'The chaplain''s perspective brings a unique depth to the story. Highly recommended for history enthusiasts and those who want to understand the human side of these events.'
+);
+
 -- Optional: allow petition_signatures without requiring forum_users
 -- Forum users are separate (email verification for forum only).
 
