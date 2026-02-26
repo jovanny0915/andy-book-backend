@@ -9,7 +9,7 @@ const siteUrl = process.env.SITE_URL || 'https://victoriacross.ca';
 export const stripeRouter = Router();
 export const stripeWebhookRouter = Router();
 
-const ALLOWED_AMOUNTS = [5, 10, 15, 20];
+const SUPPORT_AMOUNTS = [5, 10, 15, 20];
 const DISCOUNT_PERCENT = 20;
 const HANDOUT_DISCOUNT_CODES = [
   'VCROSS20A',
@@ -18,14 +18,40 @@ const HANDOUT_DISCOUNT_CODES = [
   'VCROSS20D',
   'VCROSS20E',
 ];
+const BOOK_PRICE_CENTS = Number.parseInt(process.env.BOOK_PRICE_CENTS ?? '2499', 10);
+const BOOK_CURRENCY = (process.env.BOOK_CURRENCY || 'usd').toLowerCase();
+const BOOK_PRODUCT_NAME = process.env.BOOK_PRODUCT_NAME || "The Chaplain's Diary";
+
+function normalizePaymentType(value) {
+  return value === 'book' ? 'book' : 'support';
+}
 
 function normalizeCode(value) {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
 
 /**
+ * POST /api/stripe/validate-discount-code
+ * Body: { discountCode?: string }
+ * Returns: { valid: boolean, message?: string }
+ */
+stripeRouter.post('/validate-discount-code', (req, res) => {
+  const discountCode = normalizeCode(req.body?.discountCode);
+  if (!discountCode) {
+    return res.status(200).json({ valid: true });
+  }
+  const valid = HANDOUT_DISCOUNT_CODES.includes(discountCode);
+  if (!valid) {
+    return res.status(400).json({ valid: false, message: 'Invalid discount code.' });
+  }
+  return res.status(200).json({ valid: true });
+});
+
+/**
  * POST /api/stripe/create-checkout-session
- * Body: { amount: number, discountCode?: string } — one of 5, 10, 15, 20 (USD)
+ * Body:
+ *  - Support: { paymentType?: 'support', amount: number, discountCode?: string } — one of 5, 10, 15, 20 (USD)
+ *  - Book: { paymentType: 'book', discountCode?: string } — fixed amount from BOOK_PRICE_CENTS (USD by default)
  * Returns: { url: string } — redirect to Stripe Checkout
  */
 stripeRouter.post('/create-checkout-session', async (req, res) => {
@@ -33,11 +59,33 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
     return res.status(503).json({ message: 'Payments are not configured.' });
   }
 
-  const amount = typeof req.body?.amount === 'number' ? req.body.amount : Number(req.body?.amount);
-  if (!Number.isInteger(amount) || !ALLOWED_AMOUNTS.includes(amount)) {
-    return res.status(400).json({
-      message: 'Invalid amount. Allowed values: 5, 10, 15, 20.',
-    });
+  const paymentType = normalizePaymentType(req.body?.paymentType);
+  const isBookCheckout = paymentType === 'book';
+
+  let originalAmountCents;
+  let currency;
+  let productName;
+  let productDescription;
+
+  if (isBookCheckout) {
+    if (!Number.isInteger(BOOK_PRICE_CENTS) || BOOK_PRICE_CENTS <= 0) {
+      return res.status(500).json({ message: 'Book checkout is not configured correctly.' });
+    }
+    originalAmountCents = BOOK_PRICE_CENTS;
+    currency = BOOK_CURRENCY;
+    productName = BOOK_PRODUCT_NAME;
+    productDescription = 'Direct purchase of The Chaplain\'s Diary.';
+  } else {
+    const amount = typeof req.body?.amount === 'number' ? req.body.amount : Number(req.body?.amount);
+    if (!Number.isInteger(amount) || !SUPPORT_AMOUNTS.includes(amount)) {
+      return res.status(400).json({
+        message: 'Invalid amount. Allowed values: 5, 10, 15, 20.',
+      });
+    }
+    originalAmountCents = amount * 100;
+    currency = 'usd';
+    productName = 'One-time support';
+    productDescription = 'Optional one-time support for Victoriacross.ca — research and site maintenance.';
   }
 
   const discountCode = normalizeCode(req.body?.discountCode);
@@ -48,7 +96,6 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
     return res.status(400).json({ message: 'Invalid discount code.' });
   }
 
-  const originalAmountCents = amount * 100;
   const finalAmountCents = validDiscountCode
     ? Math.round(originalAmountCents * (100 - DISCOUNT_PERCENT) / 100)
     : originalAmountCents;
@@ -59,6 +106,7 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
       mode: 'payment',
       payment_method_types: ['card'],
       metadata: {
+        payment_type: paymentType,
         discount_code: validDiscountCode ? discountCode : '',
         used_discount_code: validDiscountCode ? 'true' : 'false',
         original_amount_cents: String(originalAmountCents),
@@ -67,10 +115,10 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency,
             product_data: {
-              name: 'One-time support',
-              description: 'Optional one-time support for Victoriacross.ca — research and site maintenance.',
+              name: productName,
+              description: productDescription,
               images: [],
             },
             unit_amount: finalAmountCents, // cents
@@ -78,8 +126,8 @@ stripeRouter.post('/create-checkout-session', async (req, res) => {
           quantity: 1,
         },
       ],
-      success_url: `${siteUrl}/support?success=1&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl}/support?canceled=1`,
+      success_url: `${siteUrl}/${isBookCheckout ? 'book' : 'support'}?success=1&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/${isBookCheckout ? 'book' : 'support'}?canceled=1`,
     });
 
     res.status(200).json({ url: session.url });
@@ -119,6 +167,7 @@ stripeWebhookRouter.post('/', async (req, res) => {
       const email = session.customer_email ?? session.customer_details?.email ?? null;
       const amountCents = session.amount_total ?? 0;
       const currency = (session.currency ?? 'usd').toLowerCase();
+      const paymentType = normalizePaymentType(session.metadata?.payment_type);
       const discountCode = normalizeCode(session.metadata?.discount_code);
       const usedDiscountCode = session.metadata?.used_discount_code === 'true' || !!discountCode;
       const parsedOriginalAmount = Number.parseInt(session.metadata?.original_amount_cents ?? '', 10);
@@ -144,6 +193,7 @@ stripeWebhookRouter.post('/', async (req, res) => {
         discount_amount_cents: discountAmountCents,
         discount_code: usedDiscountCode ? discountCode : null,
         used_discount_code: usedDiscountCode,
+        payment_type: paymentType,
         currency,
       }).select('id').single();
 

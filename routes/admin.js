@@ -9,6 +9,27 @@ adminRouter.use(adminAuthMiddleware);
 
 // ---- Sales reporting (Stripe-backed payments) ----
 adminRouter.get('/sales/summary', async (req, res) => {
+  const emptyByType = {
+    support: {
+      overall_cents: 0,
+      with_code_cents: 0,
+      without_code_cents: 0,
+      discounts_given_cents: 0,
+      overall: 0,
+      with_code: 0,
+      without_code: 0,
+    },
+    book: {
+      overall_cents: 0,
+      with_code_cents: 0,
+      without_code_cents: 0,
+      discounts_given_cents: 0,
+      overall: 0,
+      with_code: 0,
+      without_code: 0,
+    },
+  };
+
   if (!supabase) {
     return res.json({
       currency: 'usd',
@@ -23,12 +44,13 @@ adminRouter.get('/sales/summary', async (req, res) => {
         with_code: 0,
         without_code: 0,
       },
+      by_type: emptyByType,
     });
   }
 
   const { data, error } = await supabase
     .from('payments')
-    .select('amount_cents, original_amount_cents, discount_amount_cents, used_discount_code, currency');
+    .select('amount_cents, original_amount_cents, discount_amount_cents, used_discount_code, payment_type, currency');
 
   if (error) {
     console.error('Admin sales summary error:', error);
@@ -39,17 +61,25 @@ adminRouter.get('/sales/summary', async (req, res) => {
     const amount = Number(payment.amount_cents || 0);
     const discountAmount = Number(payment.discount_amount_cents || 0);
     const usedCode = Boolean(payment.used_discount_code);
+    const paymentType = payment.payment_type === 'book' ? 'book' : 'support';
 
     acc.overall_cents += amount;
     acc.discounts_given_cents += discountAmount;
     acc.overall += 1;
+    acc.by_type[paymentType].overall_cents += amount;
+    acc.by_type[paymentType].discounts_given_cents += discountAmount;
+    acc.by_type[paymentType].overall += 1;
 
     if (usedCode) {
       acc.with_code_cents += amount;
       acc.with_code += 1;
+      acc.by_type[paymentType].with_code_cents += amount;
+      acc.by_type[paymentType].with_code += 1;
     } else {
       acc.without_code_cents += amount;
       acc.without_code += 1;
+      acc.by_type[paymentType].without_code_cents += amount;
+      acc.by_type[paymentType].without_code += 1;
     }
     return acc;
   }, {
@@ -60,6 +90,7 @@ adminRouter.get('/sales/summary', async (req, res) => {
     overall: 0,
     with_code: 0,
     without_code: 0,
+    by_type: emptyByType,
   });
 
   return res.json({
@@ -75,6 +106,7 @@ adminRouter.get('/sales/summary', async (req, res) => {
       with_code: summary.with_code,
       without_code: summary.without_code,
     },
+    by_type: summary.by_type,
   });
 });
 

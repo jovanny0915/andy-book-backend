@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS payments (
   discount_amount_cents INTEGER NOT NULL DEFAULT 0,
   discount_code TEXT,
   used_discount_code BOOLEAN NOT NULL DEFAULT false,
+  payment_type TEXT NOT NULL DEFAULT 'support' CHECK (payment_type IN ('support', 'book')),
   currency TEXT NOT NULL DEFAULT 'usd',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -114,7 +115,10 @@ ALTER TABLE payments ALTER COLUMN original_amount_cents SET NOT NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_amount_cents INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_code TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS used_discount_code BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'support';
+UPDATE payments SET payment_type = 'support' WHERE payment_type IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_stripe_session ON payments (stripe_session_id);
 CREATE INDEX IF NOT EXISTS idx_payments_used_discount_code ON payments (used_discount_code);
+CREATE INDEX IF NOT EXISTS idx_payments_payment_type ON payments (payment_type);
