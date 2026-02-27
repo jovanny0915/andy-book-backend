@@ -10,6 +10,7 @@ import { reviewsRouter } from './routes/reviews.js';
 import { healthRouter } from './routes/health.js';
 import { adminRouter } from './routes/admin.js';
 import { stripeRouter, stripeWebhookRouter } from './routes/stripe.js';
+import { newsletterRouter } from './routes/newsletter.js';
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/forum', forumRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/stripe', stripeRouter);
+app.use('/api/newsletter', newsletterRouter);
 
 app.use((err, req, res, next) => {
   console.error(err);
